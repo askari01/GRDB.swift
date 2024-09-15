@@ -295,19 +295,19 @@ extension ValueObservation {
     /// ```
     ///
     /// - parameter reader: A DatabaseReader.
-    /// - parameter scheduler: A ValueObservationScheduler. By default, fresh
-    ///   values are dispatched asynchronously on the main dispatch queue.
+    /// - parameter scheduler: A ValueObservationScheduler. By default,
+    ///   fresh values are dispatched on the cooperative thread pool.
     /// - parameter bufferingPolicy: see the documntation
     ///   of `AsyncThrowingStream`.
     @available(iOS 13, macOS 10.15, tvOS 13, *)
     public func values(
         in reader: some DatabaseReader,
-        scheduling scheduler: some ValueObservationScheduler = .async(onQueue: .main),
+        scheduling scheduler: some ValueObservationScheduler = .task,
         bufferingPolicy: AsyncValueObservation<Reducer.Value>.BufferingPolicy = .unbounded)
     -> AsyncValueObservation<Reducer.Value>
     where Reducer: ValueReducer
     {
-        AsyncValueObservation(bufferingPolicy: bufferingPolicy) { onError, onChange in
+        return AsyncValueObservation(bufferingPolicy: bufferingPolicy) { onError, onChange in
             self.start(in: reader, scheduling: scheduler, onError: onError, onChange: onChange)
         }
     }
