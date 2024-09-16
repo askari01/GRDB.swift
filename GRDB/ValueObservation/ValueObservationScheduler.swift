@@ -33,6 +33,18 @@ extension ValueObservationScheduler {
     }
 }
 
+// MARK: - ValueObservationMainActorScheduler
+
+public protocol ValueObservationMainActorScheduler: ValueObservationScheduler {
+    func scheduleOnMainActor(_ action: @escaping @MainActor @Sendable () -> Void)
+}
+
+extension ValueObservationMainActorScheduler {
+    public func schedule(_ action: @escaping @Sendable () -> Void) {
+        scheduleOnMainActor(action)
+    }
+}
+
 // MARK: - AsyncValueObservationScheduler
 
 /// A scheduler that asynchronously notifies fresh value of a `DispatchQueue`.
@@ -83,7 +95,7 @@ extension ValueObservationScheduler where Self == AsyncValueObservationScheduler
 /// A scheduler that notifies all values on the main `DispatchQueue`. The
 /// first value is immediately notified when the `ValueObservation`
 /// is started.
-public struct ImmediateValueObservationScheduler: ValueObservationScheduler, Sendable {
+public struct ImmediateValueObservationScheduler: ValueObservationMainActorScheduler, Sendable {
     public init() { }
     
     public func immediateInitialValue() -> Bool {
@@ -93,7 +105,7 @@ public struct ImmediateValueObservationScheduler: ValueObservationScheduler, Sen
         return true
     }
     
-    public func schedule(_ action: @escaping @Sendable () -> Void) {
+    public func scheduleOnMainActor(_ action: @escaping @MainActor @Sendable () -> Void) {
         DispatchQueue.main.async(execute: action)
     }
 }
@@ -171,5 +183,52 @@ extension ValueObservationScheduler where Self == TaskValueObservationScheduler 
     /// given priority.
     public static func task(priority: TaskPriority) -> TaskValueObservationScheduler {
         TaskValueObservationScheduler(priority: priority)
+    }
+}
+
+// MARK: - DelayedMainActorValueObservationScheduler
+
+/// A scheduler that notifies all values on the cooperative thread pool.
+@available(iOS 13, macOS 10.15, tvOS 13, *)
+final public class DelayedMainActorValueObservationScheduler: ValueObservationMainActorScheduler {
+    typealias Action = @MainActor @Sendable () -> Void
+    let continuation: AsyncStream<Action>.Continuation
+    let task: Task<Void, Never>
+    
+    init(priority: TaskPriority?) {
+        let (stream, continuation) = AsyncStream.makeStream(of: Action.self)
+        
+        self.continuation = continuation
+        self.task = Task(priority: priority) { @MainActor in
+            for await action in stream {
+                action()
+            }
+        }
+    }
+    
+    deinit {
+        task.cancel()
+    }
+    
+    public func immediateInitialValue() -> Bool {
+        false
+    }
+    
+    public func scheduleOnMainActor(_ action: @escaping @MainActor @Sendable () -> Void) {
+        continuation.yield(action)
+    }
+}
+
+@available(iOS 13, macOS 10.15, tvOS 13, *)
+extension ValueObservationScheduler where Self == DelayedMainActorValueObservationScheduler {
+    /// A scheduler that notifies all values on the main actor.
+    public static var mainActor: DelayedMainActorValueObservationScheduler {
+        DelayedMainActorValueObservationScheduler(priority: nil)
+    }
+    
+    /// A scheduler that notifies all values on the main actor, with the
+    /// given priority.
+    public static func mainActor(priority: TaskPriority) -> DelayedMainActorValueObservationScheduler {
+        DelayedMainActorValueObservationScheduler(priority: priority)
     }
 }

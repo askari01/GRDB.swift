@@ -892,6 +892,41 @@ class ValueObservationTests: GRDBTestCase {
         try test(makeDatabasePool())
     }
     
+    // MARK: - Main Actor
+    @available(iOS 13, macOS 10.15, tvOS 13, *)
+    @MainActor func test_mainActor_observation() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "test") { t in
+                t.autoIncrementedPrimaryKey("id")
+            }
+        }
+        
+        let observation = ValueObservation.tracking {
+            try Table("test").fetchCount($0)
+        }
+        
+        var value = 0 // No mutex necessary!
+        let expectation = self.expectation(description: "completion")
+        let cancellable = observation.start(
+            in: dbQueue,
+            onError: { error in XCTFail("Unexpected error: \(error)") },
+            onChange: {
+                value = $0
+                if value == 2 {
+                    expectation.fulfill()
+                }
+            })
+
+        try dbQueue.write { db in
+            try db.execute(sql: "INSERT INTO test DEFAULT VALUES")
+            try db.execute(sql: "INSERT INTO test DEFAULT VALUES")
+        }
+        withExtendedLifetime(cancellable) { _ in
+            wait(for: [expectation], timeout: 2)
+        }
+    }
+
     // MARK: - Async Await
     
     @available(iOS 13, macOS 10.15, tvOS 13, *)
