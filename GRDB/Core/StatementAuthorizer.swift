@@ -7,6 +7,8 @@ import CSQLite
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
 import SQLite3
+#endif
+
 #if canImport(Darwin)
 import Darwin
 #endif
