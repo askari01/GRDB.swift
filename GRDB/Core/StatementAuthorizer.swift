@@ -7,6 +7,8 @@ import CSQLite
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
 import SQLite3
+#if canImport(Darwin)
+import Darwin
 #endif
 
 /// A protocol around sqlite3_set_authorizer
